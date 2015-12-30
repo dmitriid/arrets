@@ -31,10 +31,10 @@ again: ets).
 - `length(Handle, Row)`: length of row
 - `push(Handle, Item)`: push. Equivalent to `insert_at(Handle, 0, Item)`
 - `push(Handle, Row), Item`: push to row. Equivalent to `insert_at(Handle, Row, 0, Item)`
-- `pop(Handle)`: pop. Equivalent to `splice(Handle, 0, 1)`
-- `pop(handle, Row)`: pop from row. Equivalent to `splice(Handle, Row, 0, 1)`
-- `pop_n(Handle, N)`: pop N items. Equivalent to `range(Handle, 0, N)`
-- `pop_n(Handle, Row, N)`: pop N items from Row. Equivalent to `range(Handle, Row, 0, N)`
+- `pop(Handle)`: pop. Equivalent to `at(Handle, 0)`
+- `pop(handle, Row)`: pop from row. Equivalent to `at(Handle, Row, 0)`
+- `pop_n(Handle, N)`: pop N items. Equivalent to `splice(Handle, 0, N)`
+- `pop_n(Handle, Row, N)`: pop N items from Row. Equivalent to `splice(Handle, Row, 0, N)`
 
 ### Upcoming
 
@@ -44,5 +44,11 @@ again: ets).
 - `slice(Handle, Row, From, Count)`: Same for a row
 - `splice(Handle, From, Count)`: Remove and return items between `From `and `From + Count` in the stack
 - `splice(Handle, Row, From, Count)`: Same for a row
+- `at(Handle, Index)`: Alias for `nth`
+- `at(Handle, Row, Index)`: Alias for `nth`
+- `nth(Handle, Index)`: Return `Item` at `Index`. Leave array intact.
+- `nth(Handle, Row, Index)`: Return `Item` at `Index` at `Row`. Leave array intact.
 - `insert_at(Handle, Index, Item)`: Insert `Item` at `Index`
 - `insert_at(Handle, Row, Index, Item)`: Insert `Item` at `Index` in `Row`
+- `update_at(Handle, Index, Item)`: Update `Item` at `Index`
+- `update_at(Handle, Row, Index, Item)`: Update `Item` at `Index` in `Row`
