@@ -1,0 +1,8 @@
+.idea
+*.iml
+*.beam
+*.d
+.erlang.mk
+ebin/*
+logs
+
