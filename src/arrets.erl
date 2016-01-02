@@ -21,7 +21,6 @@
         , length/2
         ]).
 
-%% Push/pop
 %% Data manipulation. Destructive
 -export([ push/2
         , push/3
@@ -29,6 +28,8 @@
         , pop/2
         , pop_n/2
         , pop_n/3
+        , slice/3
+        , slice/4
         ]).
 
 %%_* Types =====================================================================
@@ -39,7 +40,6 @@
 
 %_* Lifecycle ------------------------------------------------------------------
 -spec new() -> integer().
-new() -> ets:new('_', [set]).
 new() -> ets:new('arrets$array', [set]).
 
 -spec new(atom()) -> atom().
@@ -138,19 +138,25 @@ idx(Handle, Row, Idx0) ->
 
 %% Only leave the items between From and From + Length in the stack
 %% Update indices accordingly
+-spec slice(handle(), integer(), integer()) -> [term()].
+slice(Handle, From, Length) ->
+  slice(Handle, 0, From, Length).
+
 -spec slice(handle(), integer(), integer(), integer()) -> [term()].
 slice(Handle, Row, From0, Length) ->
-  Count = length(Handle, Row),
   From = case From0 < 0 of
-           true -> Count + From0;
-           _    -> From0
+           true ->
+             Count = length(Handle, Row),
+             Count + From0;
+           _    ->
+             From0
          end,
-  %%  Spec = ets:fun2ms(fun({{R, X}, Y}) when X >= From
-  %%                                        , X =< To
-  %%                                        , R =:= Row-> {{R, X}, Y} end),
+  %%  Spec = fun({{R, X}, Y}) when X >= From
+  %%                             , X =< To
+  %%                             , R =:= Row-> {{R, X}, Y} end
   Spec = [{{{'$1', '$2'}, '$3'},
            [{'>=', '$2', {const, From}},
-            {'=<', '$2', {const, From + Length}},
+            {'<', '$2', {const, From + Length}},
             {'=:=', '$1', {const, Row}}],
            [{{{{'$1', '$2'}}, '$3'}}]}],
 
@@ -158,7 +164,15 @@ slice(Handle, Row, From0, Length) ->
   NewItems = lists:foldl(fun({{R, Idx}, Obj}, Acc) ->
                            [{{R, Idx - From}, Obj} | Acc]
                          end, [], Items),
+
+  %% OtherSpec = fun({{R, X}, Y}) when R /= Row -> {{R, X}, Y} end
+  OtherSpec = [{{{'$1', '$2'}, '$3'},
+                [{'/=', '$1', {const, Row}}],
+                [{{{{'$1', '$2'}}, '$3'}}]}],
+
+  OtherItems = ets:select(Handle, OtherSpec),
   ets:delete_all_objects(Handle),
   ets:insert(Handle, NewItems),
+  ets:insert(Handle, OtherItems),
   [I || {_, I} <- lists:sort(NewItems)].
 

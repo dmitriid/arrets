@@ -35,13 +35,13 @@ again: ets).
 - `pop(handle, Row)`: pop from row. Equivalent to `at(Handle, Row, 0)`
 - `pop_n(Handle, N)`: pop N items. Equivalent to `splice(Handle, 0, N)`
 - `pop_n(Handle, Row, N)`: pop N items from Row. Equivalent to `splice(Handle, Row, 0, N)`
+- `slice(Handle, From, Count)`: Only leave the items between `From `and `From + Count` in the stack
+- `slice(Handle, Row, From, Count)`: Same for a row
 
 ### Upcoming
 
 - `range(Handle, From, Count)`: Return items between `From` and `From + Count`. Leave array intact
 - `range(Handle, Row, From, Count)`: Same for a row
-- `slice(Handle, From, Count)`: Only leave the items between `From `and `From + Count` in the stack
-- `slice(Handle, Row, From, Count)`: Same for a row
 - `splice(Handle, From, Count)`: Remove and return items between `From `and `From + Count` in the stack
 - `splice(Handle, Row, From, Count)`: Same for a row
 - `at(Handle, Index)`: Alias for `nth`

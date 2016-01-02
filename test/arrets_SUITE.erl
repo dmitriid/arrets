@@ -33,6 +33,9 @@
         , pop_rows/1
         , pop_n/1
         , pop_n_rows/1
+        , slice/1
+        , slice_rows/1
+        , slice_negative/1
         ]).
 
 %%_* Includes ==================================================================
@@ -294,6 +297,95 @@ pop_n_rows(Config) ->
                         {Row + 1, Res andalso ResultAcc}
                       end, {0, true}, ListOfElements),
                     Result
+                  end
+                ),
+  ?assert(quickcheck(Prop)).
+
+%-------------------------------------------------------------------------------
+slice(doc) ->
+  "Only leave the items between From and From + Count in the array";
+slice(Config) ->
+  Handle = lkup(arrets, Config),
+  Prop = ?FORALL( {Elements, From, Count}
+                , ?LET( Els
+                      , non_empty(elements())
+                      , begin
+                          Length = erlang:length(Els),
+                          { Els
+                          , random:uniform(Length) - 1
+                          , random:uniform(Length)
+                          }
+                        end
+                      )
+                , begin
+                    populate(Handle, Elements),
+                    arrets:slice(Handle, From, Count),
+                    Expected = lists:sublist( lists:reverse(Elements)
+                                            , From + 1
+                                            , Count),
+                    Actual = [I || {_, I} <- lists:sort(ets:tab2list(Handle))],
+                    Expected == Actual
+                  end
+                ),
+  ?assert(quickcheck(Prop)).
+
+%-------------------------------------------------------------------------------
+slice_rows(doc) ->
+  "Only leave the items between From and From + Count in the array "
+  "in corresponding row";
+slice_rows(Config) ->
+  Handle = lkup(arrets, Config),
+  Prop = ?FORALL( ListOfElements
+                , list(elements())
+                , begin
+                    populate_rows(Handle, ListOfElements),
+                    {_, Result} = lists:foldl(fun(Elements, {Row, Result}) ->
+                      Length = erlang:length(Elements),
+                      {From, Count} = case Length of
+                                        0 -> {0, random:uniform(10)};
+                                        _ -> { random:uniform(Length) - 1
+                                             , random:uniform(Length)}
+                                      end,
+                      arrets:slice(Handle, Row, From, Count),
+                      Expected = lists:sublist( lists:reverse(Elements)
+                                              , From + 1
+                                              , Count),
+                      Inserted = lists:sort(ets:tab2list(Handle)),
+                      Actual = [I || {{R, _}, I} <- Inserted, R == Row],
+                      {Row + 1, Expected == Actual}
+                    end, {0, true}, ListOfElements),
+                    Result
+                  end
+                ),
+  ?assert(quickcheck(Prop)).
+
+%-------------------------------------------------------------------------------
+slice_negative(doc) ->
+  "If From < 0, only leave the items between (Length + From) and "
+  "(Length + From) + Count in the array";
+slice_negative(Config) ->
+  Handle = lkup(arrets, Config),
+  Prop = ?FORALL( {Elements, From, NegativeFrom, Count}
+                , ?LET( Els
+                      , non_empty(elements())
+                      , begin
+                          Length = erlang:length(Els),
+                          From = random:uniform(Length) - 1,
+                          { Els
+                          , From
+                          , From - Length
+                          , random:uniform(Length)
+                          }
+                        end
+                      )
+                , begin
+                    populate(Handle, Elements),
+                    arrets:slice(Handle, NegativeFrom, Count),
+                    Expected = lists:sublist( lists:reverse(Elements)
+                                            , From + 1
+                                            , Count),
+                    Actual = [I || {_, I} <- lists:sort(ets:tab2list(Handle))],
+                    Expected == Actual
                   end
                 ),
   ?assert(quickcheck(Prop)).
