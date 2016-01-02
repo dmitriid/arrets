@@ -22,6 +22,7 @@
         ]).
 
 %% Push/pop
+%% Data manipulation. Destructive
 -export([ push/2
         , push/3
         , pop/1
@@ -39,6 +40,7 @@
 %_* Lifecycle ------------------------------------------------------------------
 -spec new() -> integer().
 new() -> ets:new('_', [set]).
+new() -> ets:new('arrets$array', [set]).
 
 -spec new(atom()) -> atom().
 new(Handle) ->

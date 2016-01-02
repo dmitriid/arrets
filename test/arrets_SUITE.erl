@@ -15,14 +15,24 @@
         ]).
 
 %% Tests
+%% Lifecycle
 -export([ new/1
         , new_with_handle/1
         , teardown/1
-        , length/1
-        , push/1
+        ]).
+
+%% Info
+-export([ length/1
+        , length_rows/1
+        ]).
+
+%% Data manipulation. Destructive
+-export([ push/1
+        , push_rows/1
         , pop/1
+        , pop_rows/1
         , pop_n/1
-%%        , pop_and_push/1
+        , pop_n_rows/1
         ]).
 
 %%_* Includes ==================================================================
@@ -104,10 +114,28 @@ length(Config) ->
   Prop = ?FORALL( Elements
                 , elements()
                 , begin
-                    ets:delete_all_objects(Handle),
-                    lists:foreach( fun(Element) -> arrets:push(Handle, Element) end
-                                 , Elements),
+                    populate(Handle, Elements),
                     arrets:length(Handle) == erlang:length(Elements)
+                  end
+                ),
+  ?assert(quickcheck(Prop)).
+
+%-------------------------------------------------------------------------------
+length_rows(doc) ->
+  "Length reports correct count of items for each row";
+length_rows(Config) ->
+  Handle = lkup(arrets, Config),
+  Prop = ?FORALL( ListOfElements
+                , list(elements())
+                , begin
+                    populate_rows(Handle, ListOfElements),
+                    {_, Result} = lists:foldl(
+                      fun(Elements, {Row, ResultAcc}) ->
+                        Expected = erlang:length(Elements),
+                        Actual = arrets:length(Handle, Row),
+                        {Row + 1, (Expected == Actual) andalso ResultAcc}
+                      end, {0, true}, ListOfElements),
+                    Result
                   end
                 ),
   ?assert(quickcheck(Prop)).
@@ -125,16 +153,34 @@ push(Config) ->
                             , [Elements, ets:tab2list(Handle)])
                     end,
                     begin
-                      ets:delete_all_objects(Handle),
-                      lists:foreach( fun(Element) -> arrets:push(Handle, Element) end
-                                   , Elements),
+                      populate(Handle, Elements),
                       Inserted = lists:reverse(lists:sort(ets:tab2list(Handle))),
                       InsertedItems = [I || {{_, _}, I} <- Inserted],
-
 
                       erlang:length(Elements) == erlang:length(Inserted) andalso
                       Elements == InsertedItems
                     end)
+                ),
+  ?assert(quickcheck(Prop)).
+
+%-------------------------------------------------------------------------------
+push_rows(doc) ->
+  "Pushing an element adds the element to the corresponding ets table at row N "
+  "in the same order";
+push_rows(Config) ->
+  Handle = lkup(arrets, Config),
+  Prop = ?FORALL( ListOfElements
+                , list(elements())
+                , begin
+                    populate_rows(Handle, ListOfElements),
+                    All = ets:tab2list(Handle),
+                    {_, Result} = lists:foldl(
+                       fun(Elements, {Row, ResultAcc}) ->
+                         Actual = lists:reverse([I || {{R, _}, I} <- lists:sort(All), R == Row]),
+                         {Row + 1, (Elements == Actual) andalso ResultAcc}
+                       end, {0, true}, ListOfElements),
+                    Result
+                  end
                 ),
   ?assert(quickcheck(Prop)).
 
@@ -151,9 +197,7 @@ pop(Config) ->
                             , [Elements])
                     end,
                     begin
-                      ets:delete_all_objects(Handle),
-                      lists:foreach( fun(Element) -> arrets:push(Handle, Element) end
-                                   , Elements),
+                      populate(Handle, Elements),
                       Result = lists:all(
                                  fun(Item) ->
                                    Popped = arrets:pop(Handle),
@@ -162,6 +206,30 @@ pop(Config) ->
                                , lists:reverse(Elements)),
                       Result andalso ets:info(Handle, size) == 0
                     end)
+                ),
+  ?assert(quickcheck(Prop)).
+
+%-------------------------------------------------------------------------------
+pop_rows(doc) ->
+  "Pop removes and returns the topmost item on the stack in row N";
+pop_rows(Config) ->
+  Handle = lkup(arrets, Config),
+  Prop = ?FORALL( ListOfElements
+                , list(elements())
+                , begin
+                    populate_rows(Handle, ListOfElements),
+                    {_, Result} = lists:foldl(
+                       fun(Elements, {Row, ResultAcc}) ->
+                         LocalResult = lists:foldl(
+                           fun(Expected, ResAcc) ->
+                             Actual = arrets:pop(Handle, Row),
+                             (Expected == Actual) andalso ResAcc
+                           end, true, lists:reverse(Elements)
+                         ),
+                         {Row + 1, LocalResult andalso ResultAcc}
+                       end, {0, true}, ListOfElements),
+                    Result andalso ets:info(Handle, size) == 0
+                  end
                 ),
   ?assert(quickcheck(Prop)).
 
@@ -180,9 +248,7 @@ pop_n(Config) ->
                         }
                       )
                 , begin
-                    ets:delete_all_objects(Handle),
-                    lists:foreach( fun(Element) -> arrets:push(Handle, Element) end
-                                 , Elements),
+                    populate(Handle, Elements),
                     NFirst = lists:sublist(lists:reverse(Elements), N),
                     NPopped = arrets:pop_n(Handle, N),
                     Remaining = lists:sort(ets:tab2list(Handle)),
@@ -197,6 +263,41 @@ pop_n(Config) ->
                   end
                 ),
   ?assert(quickcheck(Prop)).
+
+%-------------------------------------------------------------------------------
+pop_n_rows(doc) ->
+  "Popping N items removes and returns top N items from a row";
+pop_n_rows(Config) ->
+  Handle = lkup(arrets, Config),
+  Prop = ?FORALL( {ListOfElements, N}
+                , {list(elements()), nat()}
+                , begin
+                    populate_rows(Handle, ListOfElements),
+                    {_, Result} = lists:foldl(
+                      fun(Elements, {Row, ResultAcc}) ->
+                        NFirst = lists:sublist(lists:reverse(Elements), N),
+                        NPopped = arrets:pop_n(Handle, Row, N),
+                        Remaining = lists:sort(ets:tab2list(Handle)),
+                        RemainingItems = [I || {{R, _}, I} <- Remaining, R == Row],
+                        Diff = NFirst -- NPopped,
+                        {_, RemDiff0} = lists:foldl(fun(E, {NN, Acc}) ->
+                          case NN >= N of
+                            true -> {NN + 1, [E | Acc]};
+                            false -> {NN + 1, Acc}
+                          end
+                        end, {0, []}, lists:reverse(Elements)),
+                        RemDiff = lists:reverse(RemDiff0),
+
+                        Res =         erlang:length(NPopped) == erlang:length(NFirst)
+                              andalso Diff == []
+                              andalso RemDiff == RemainingItems,
+                        {Row + 1, Res andalso ResultAcc}
+                      end, {0, true}, ListOfElements),
+                    Result
+                  end
+                ),
+  ?assert(quickcheck(Prop)).
+
 %%_* EQC Generators ============================================================
 
 elements() ->
@@ -216,3 +317,21 @@ doc(Name) ->
       _:_ -> iolist_to_binary(io_lib:format("~p", [Name]))
   end,
   ct:pal("~s", [Desc]).
+
+populate(Handle, Elements) ->
+  ets:delete_all_objects(Handle),
+  lists:foreach( fun(Element) -> arrets:push(Handle, Element) end
+               , Elements).
+
+populate_rows(Handle, ListOfElements) ->
+  ets:delete_all_objects(Handle),
+  lists:foldl(
+    fun(Elements, Row) ->
+      lists:foreach(
+        fun(Element) ->
+          arrets:push(Handle, Row, Element)
+        end, Elements
+      ),
+      Row + 1
+    end, 0, ListOfElements
+  ).
