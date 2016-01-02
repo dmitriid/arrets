@@ -32,6 +32,11 @@
         , slice/4
         ]).
 
+%% Data manipulation. Non-destructive
+-export([ range/3
+        , range/4
+        ]).
+
 %%_* Types =====================================================================
 
 -type handle() :: atom() | integer().
@@ -94,6 +99,10 @@ pop_n(Handle, Row, N) ->
   Count = length(Handle, Row),
   slice(Handle, Row, N, Count),
   Items.
+
+-spec range(handle(), integer(), integer()) -> [term()].
+range(Handle, From, Count) ->
+  range(Handle, 0, From, Count).
 
 -spec range(handle(), integer(), integer(), integer()) -> [term()].
 range(Handle, Row, From0, Count) ->

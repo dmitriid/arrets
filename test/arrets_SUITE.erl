@@ -38,6 +38,13 @@
         , slice_negative/1
         ]).
 
+%% Data manipulation. Non-destructive
+-export([ range/1
+        , range_rows/1
+        , range_negative/1
+        ]).
+
+
 %%_* Includes ==================================================================
 -include_lib("eqc/include/eqc.hrl").
 -include_lib("eunit/include/eunit.hrl").
@@ -352,7 +359,7 @@ slice_rows(Config) ->
                                               , Count),
                       Inserted = lists:sort(ets:tab2list(Handle)),
                       Actual = [I || {{R, _}, I} <- Inserted, R == Row],
-                      {Row + 1, Expected == Actual}
+                      {Row + 1, Expected == Actual andalso Result}
                     end, {0, true}, ListOfElements),
                     Result
                   end
@@ -385,6 +392,96 @@ slice_negative(Config) ->
                                             , From + 1
                                             , Count),
                     Actual = [I || {_, I} <- lists:sort(ets:tab2list(Handle))],
+                    Expected == Actual
+                  end
+                ),
+  ?assert(quickcheck(Prop)).
+
+%-------------------------------------------------------------------------------
+range(doc) ->
+  "Return data in range";
+range(Config) ->
+  Handle = lkup(arrets, Config),
+  Prop = ?FORALL( {Elements, From, Count}
+                , ?LET( Els
+                      , elements()
+                      , ?LET( From
+                            , ?SUCHTHAT(X, nat(), X =< erlang:length(Els))
+                            , {Els, From, From + erlang:length(Els)}
+                            )
+                      )
+                , begin
+                    populate(Handle, Elements),
+                    InsertedCount = arrets:length(Handle),
+                    Expected = lists:sublist( lists:reverse(Elements)
+                                            , From + 1
+                                            , Count),
+                    Actual = arrets:range(Handle, From, Count),
+                    RemainingCount = arrets:length(Handle),
+                    Expected == Actual andalso
+                    InsertedCount == RemainingCount
+                  end
+                ),
+  ?assert(quickcheck(Prop)).
+
+%-------------------------------------------------------------------------------
+range_rows(doc) ->
+  "Return data in range for a row";
+range_rows(Config) ->
+  Handle = lkup(arrets, Config),
+  Prop = ?FORALL( ListOfElements
+                , list(elements())
+                , begin
+                    populate_rows(Handle, ListOfElements),
+
+                    {_, Result} = lists:foldl(fun(Elements, {Row, Result}) ->
+                      Length = erlang:length(Elements),
+                      {From, Count} = case Length of
+                                        0 -> {0, random:uniform(10)};
+                                        _ -> { random:uniform(Length) - 1
+                                             , random:uniform(Length)}
+                                      end,
+                      Actual = arrets:range(Handle, Row, From, Count),
+                      Expected = lists:sublist( lists:reverse(Elements)
+                                              , From + 1
+                                              , Count),
+                      InsertedLength = arrets:length(Handle, Row),
+
+                      { Row + 1
+                      , Expected == Actual andalso
+                        InsertedLength == erlang:length(Elements) andalso
+                        Result
+                      }
+                    end, {0, true}, ListOfElements),
+                    Result
+                  end
+                ),
+  ?assert(quickcheck(Prop)).
+
+%-------------------------------------------------------------------------------
+range_negative(doc) ->
+  "If From < 0, Return data in range for with From = Count + From";
+range_negative(Config) ->
+  Handle = lkup(arrets, Config),
+  Prop = ?FORALL( {Elements, From, NegativeFrom, Count}
+                , ?LET( Els
+                      , non_empty(elements())
+                      , begin
+                          Length = erlang:length(Els),
+                          From = random:uniform(Length) - 1,
+                          { Els
+                          , From
+                          , From - Length
+                          , random:uniform(Length)
+                          }
+                        end
+                      )
+                , begin
+                    populate(Handle, Elements),
+                    Actual = arrets:range(Handle, NegativeFrom, Count),
+                    Expected = lists:sublist( lists:reverse(Elements)
+                                            , From + 1
+                                            , Count),
                     Expected == Actual
                   end
                 ),
