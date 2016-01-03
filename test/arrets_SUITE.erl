@@ -41,6 +41,8 @@
         , splice_negative/1
         , insert_at/1
         , insert_at_rows/1
+        , update_at/1
+        , update_at_rows/1
         ]).
 
 %% Data manipulation. Non-destructive
@@ -542,7 +544,7 @@ insert_at(Config) ->
 
 %-------------------------------------------------------------------------------
 insert_at_rows(doc) ->
-  "Remove and return items between From and From + Length in a row";
+  "Insert a new item at position N in a row";
 insert_at_rows(Config) ->
   Handle = lkup(arrets, Config),
   Prop = ?FORALL( {ListOfElements, Item}
@@ -559,6 +561,68 @@ insert_at_rows(Config) ->
                       , Item == Actual andalso
                         lists:reverse(Elements) == Remaining andalso
                         Result
+                      }
+                    end, {0, true}, ListOfElements),
+                    Result
+                  end
+                ),
+  ?assert(quickcheck(Prop)).
+
+%-------------------------------------------------------------------------------
+update_at(doc) ->
+  "Update an item at position N";
+update_at(Config) ->
+  Handle = lkup(arrets, Config),
+  Prop = ?FORALL( {Elements, N, Item}
+                , ?LET( Els
+                      , non_empty(elements())
+                      , begin
+                          Length = erlang:length(Els),
+                          { Els
+                          , random:uniform(Length) - 1
+                          , int()
+                          }
+                        end
+                      )
+                , begin
+                    populate(Handle, Elements),
+                    arrets:update_at(Handle, N, Item),
+                    {_, Result} = lists:foldl(fun(E, {Idx, Result}) ->
+                      Actual = arrets:at(Handle, Idx),
+                      Res = case Idx of
+                        N -> Item == Actual;
+                        _ -> E == Actual
+                      end,
+                      {Idx + 1, Res andalso Result}
+                    end, {0, true}, lists:reverse(Elements)),
+                    Result
+                  end
+                ),
+  ?assert(quickcheck(Prop)).
+
+%-------------------------------------------------------------------------------
+update_at_rows(doc) ->
+  "Update an item at position N in a row";
+update_at_rows(Config) ->
+  Handle = lkup(arrets, Config),
+  Prop = ?FORALL( {ListOfElements, Item}
+                , {list(non_empty(elements())), int()}
+                , begin
+                    populate_rows(Handle, ListOfElements),
+                    {_, Result} = lists:foldl(fun(Elements, {Row, ResultAcc}) ->
+                      N = random:uniform(erlang:length(Elements)) - 1,
+                      arrets:update_at(Handle, Row, N, Item),
+                      {_, LocalResult} = lists:foldl(fun(E, {Idx, Result}) ->
+                        Actual = arrets:at(Handle, Row, Idx),
+                        Res = case Idx of
+                          N -> Item == Actual;
+                          _ -> E == Actual
+                        end,
+                        {Idx + 1, Res andalso Result}
+                      end, {0, true}, lists:reverse(Elements)),
+
+                      { Row + 1
+                      , LocalResult andalso ResultAcc
                       }
                     end, {0, true}, ListOfElements),
                     Result

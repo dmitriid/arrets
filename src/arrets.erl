@@ -34,6 +34,8 @@
         , splice/4
         , insert_at/3
         , insert_at/4
+        , update_at/3
+        , update_at/4
         ]).
 
 %% Data manipulation. Non-destructive
@@ -146,6 +148,14 @@ insert_at(Handle, Row, Index, Item) ->
                 end, ItemsAbove),
   ets:insert(Handle, NewItemsAbove),
   ets:insert(Handle, {{Row, Idx}, Item}).
+
+-spec update_at(handle(), integer(), term()) -> boolean().
+update_at(Handle, Index, Item) ->
+  update_at(Handle, 0, Index, Item).
+
+-spec update_at(handle(), integer(), integer(), term()) -> boolean().
+update_at(Handle, Row, Index, Item) ->
+  ets:insert(Handle, {{Row, Index}, Item}).
 
 -spec idx(handle(), integer(), integer()) -> integer().
 idx(Handle, Row, Idx0) ->

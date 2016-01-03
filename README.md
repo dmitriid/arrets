@@ -47,8 +47,5 @@ again: ets).
 - `nth(Handle, Row, Index)`: Return `Item` at `Index` at `Row`. Leave array intact.
 - `insert_at(Handle, Index, Item)`: Insert `Item` at `Index`
 - `insert_at(Handle, Row, Index, Item)`: Insert `Item` at `Index` in `Row`
-
-### Upcoming
-
 - `update_at(Handle, Index, Item)`: Update `Item` at `Index`
 - `update_at(Handle, Row, Index, Item)`: Update `Item` at `Index` in `Row`
