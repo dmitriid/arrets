@@ -30,6 +30,8 @@
         , pop_n/3
         , slice/3
         , slice/4
+%%        , splice/3
+%%        , splice/4
         ]).
 
 %% Data manipulation. Non-destructive
@@ -95,10 +97,7 @@ pop_n(Handle, N) ->
 pop_n(_Handle, _Row, 0) ->
   [];
 pop_n(Handle, Row, N) ->
-  Items = range(Handle, Row, 0, N),
-  Count = length(Handle, Row),
-  slice(Handle, Row, N, Count),
-  Items.
+  splice(Handle, Row, 0, N).
 
 -spec range(handle(), integer(), integer()) -> [term()].
 range(Handle, From, Count) ->
@@ -145,27 +144,26 @@ idx(Handle, Row, Idx0) ->
     _    -> Idx0
   end.
 
-%% Only leave the items between From and From + Length in the stack
-%% Update indices accordingly
+%% Only leave the items between From and From + Length in the array
 -spec slice(handle(), integer(), integer()) -> [term()].
 slice(Handle, From, Length) ->
   slice(Handle, 0, From, Length).
 
 -spec slice(handle(), integer(), integer(), integer()) -> [term()].
-slice(Handle, Row, From0, Length) ->
+slice(Handle, Row, From0, Count) ->
   From = case From0 < 0 of
            true ->
-             Count = length(Handle, Row),
-             Count + From0;
+             ItemCount = length(Handle, Row),
+             ItemCount + From0;
            _    ->
              From0
          end,
   %%  Spec = fun({{R, X}, Y}) when X >= From
-  %%                             , X =< To
+  %%                             , X < To
   %%                             , R =:= Row-> {{R, X}, Y} end
   Spec = [{{{'$1', '$2'}, '$3'},
            [{'>=', '$2', {const, From}},
-            {'<', '$2', {const, From + Length}},
+            {'<', '$2', {const, From + Count}},
             {'=:=', '$1', {const, Row}}],
            [{{{{'$1', '$2'}}, '$3'}}]}],
 
@@ -184,4 +182,49 @@ slice(Handle, Row, From0, Length) ->
   ets:insert(Handle, NewItems),
   ets:insert(Handle, OtherItems),
   [I || {_, I} <- lists:sort(NewItems)].
+
+%% Remove and return items between From and From + Length in the array
+-spec splice(handle(), integer(), integer()) -> [term()].
+splice(Handle, From, Count) ->
+  splice(Handle, 0, From, Count).
+
+-spec splice(handle(), integer(), integer(), integer()) -> [term()].
+splice(Handle, Row, From0, Count) ->
+  From = idx(Handle, Row, From0),
+
+  %%  Spec = fun({{R, X}, Y}) when X >= From
+  %%                             , X =< To
+  %%                             , R =:= Row-> {{R, X}, Y} end
+  Spec = [{{{'$1', '$2'}, '$3'},
+           [{'>=', '$2', {const, From}},
+            {'<', '$2', {const, From + Count}},
+            {'=:=', '$1', {const, Row}}],
+           [{{{{'$1', '$2'}}, '$3'}}]}],
+
+  Items = ets:select(Handle, Spec),
+
+  %%  Spec = fun({{R, X}, Y}) when R =:= Row, (X < From orelse X >= To);
+  %%                               R /= Row -> {{R, X}, Y} end
+  OtherSpec = [{{{'$1', '$2'}, '$3'},
+                [{'=:=', '$1', {const, Row}},
+                 {'orelse', {'<', '$2', {const, From}}
+                          , {'>=', '$2', {const, From + Count}}}],
+                [{{{{'$1', '$2'}}, '$3'}}]},
+               {{{'$1', '$2'}, '$3'},
+                [{'/=', '$1', {const, Row}}],
+                [{{{{'$1', '$2'}}, '$3'}}]}],
+  OtherItems = ets:select(Handle, OtherSpec),
+
+  NewItems = lists:foldl(fun({{R, X}, Y}, Acc) ->
+    NewX = case R =:= Row andalso X >= From + Count of
+             true -> X - Count;
+             false -> X
+           end,
+    [{{R, NewX}, Y} | Acc]
+  end, [], OtherItems),
+
+  ets:delete_all_objects(Handle),
+  ets:insert(Handle, NewItems),
+  [I || {_, I} <- lists:sort(Items)].
+
 
