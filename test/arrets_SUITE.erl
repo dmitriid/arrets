@@ -104,9 +104,13 @@ do_init_per_testcase(_, Config) ->
 
 end_per_testcase(teardown, _) ->
   ok;
+end_per_testcase(new, _) ->
+  ok;
+end_per_testcase(new_with_handle, _) ->
+  ok;
 end_per_testcase(_, Config) ->
-  Arrets = lkup(arrets, Config),
-  arrets:teardown(Arrets),
+  Handle = lkup(arrets, Config),
+  arrets:teardown(Handle),
   ok.
 
 %%_* Tests =====================================================================
