@@ -36,6 +36,9 @@
         , slice/1
         , slice_rows/1
         , slice_negative/1
+        , splice/1
+        , splice_rows/1
+        , splice_negative/1
         ]).
 
 %% Data manipulation. Non-destructive
@@ -393,6 +396,114 @@ slice_negative(Config) ->
                                             , Count),
                     Actual = [I || {_, I} <- lists:sort(ets:tab2list(Handle))],
                     Expected == Actual
+                  end
+                ),
+  ?assert(quickcheck(Prop)).
+
+%-------------------------------------------------------------------------------
+splice(doc) ->
+  "Remove and return items between From and From + Length in the array";
+splice(Config) ->
+  Handle = lkup(arrets, Config),
+  Prop = ?FORALL( {Elements, From, Count}
+                , ?LET( Els
+                      , non_empty(elements())
+                      , begin
+                          Length = erlang:length(Els),
+                          { Els
+                          , random:uniform(Length) - 1
+                          , random:uniform(Length)
+                          }
+                        end
+                      )
+                , begin
+                    populate(Handle, Elements),
+                    Expected = lists:sublist( lists:reverse(Elements)
+                                            , From + 1
+                                            , Count),
+                    Actual = arrets:splice(Handle, From, Count),
+                    Remaining = arrets:slice(Handle, 0, arrets:length(Handle)),
+                    {_, ExpectedRemaining} = lists:foldl(fun(E, {Idx, Acc}) ->
+                      case Idx < From orelse Idx >= From + Count of
+                        true -> {Idx + 1, [E | Acc]};
+                        false -> {Idx + 1, Acc}
+                      end
+                    end, {0, []}, lists:reverse(Elements)),
+                    Expected == Actual andalso Remaining == lists:reverse(ExpectedRemaining)
+                  end
+                ),
+  ?assert(quickcheck(Prop)).
+
+%-------------------------------------------------------------------------------
+splice_rows(doc) ->
+  "Remove and return items between From and From + Length in a row";
+splice_rows(Config) ->
+  Handle = lkup(arrets, Config),
+  Prop = ?FORALL( ListOfElements
+                , list(elements())
+                , begin
+                    populate_rows(Handle, ListOfElements),
+                    {_, Result} = lists:foldl(fun(Elements, {Row, Result}) ->
+                      Length = erlang:length(Elements),
+                      {From, Count} = case Length of
+                                        0 -> {0, random:uniform(10)};
+                                        _ -> { random:uniform(Length) - 1
+                                             , random:uniform(Length)}
+                                      end,
+                      Expected = lists:sublist( lists:reverse(Elements)
+                                              , From + 1
+                                              , Count),
+                      Actual = arrets:splice(Handle, Row, From, Count),
+                      Remaining = arrets:slice(Handle, Row, 0, arrets:length(Handle, Row)),
+                      {_, ExpectedRemaining} = lists:foldl(fun(E, {Idx, Acc}) ->
+                        case Idx < From orelse Idx >= From + Count of
+                          true -> {Idx + 1, [E | Acc]};
+                          false -> {Idx + 1, Acc}
+                        end
+                      end, {0, []}, lists:reverse(Elements)),
+                      { Row + 1
+                      , Expected == Actual andalso
+                        Remaining == lists:reverse(ExpectedRemaining) andalso
+                        Result
+                      }
+                    end, {0, true}, ListOfElements),
+                    Result
+                  end
+                ),
+  ?assert(quickcheck(Prop)).
+%-------------------------------------------------------------------------------
+splice_negative(doc) ->
+  "If From < 0, only remove and return items between (Length + From) and "
+  "(Length + From) + Count in the array";
+splice_negative(Config) ->
+  Handle = lkup(arrets, Config),
+  Prop = ?FORALL( {Elements, From, NegativeFrom, Count}
+                , ?LET( Els
+                      , non_empty(elements())
+                      , begin
+                          Length = erlang:length(Els),
+                          From = random:uniform(Length) - 1,
+                          { Els
+                          , From
+                          , From - Length
+                          , random:uniform(Length)
+                          }
+                        end
+                      )
+                , begin
+                    populate(Handle, Elements),
+                    Expected = lists:sublist( lists:reverse(Elements)
+                                            , From + 1
+                                            , Count),
+                    Actual = arrets:splice(Handle, NegativeFrom, Count),
+                    Remaining = arrets:slice(Handle, 0, arrets:length(Handle)),
+                    {_, ExpectedRemaining} = lists:foldl(fun(E, {Idx, Acc}) ->
+                      case Idx < From orelse Idx >= From + Count of
+                        true -> {Idx + 1, [E | Acc]};
+                        false -> {Idx + 1, Acc}
+                      end
+                    end, {0, []}, lists:reverse(Elements)),
+                    Expected == Actual andalso Remaining == lists:reverse(ExpectedRemaining)
                   end
                 ),
   ?assert(quickcheck(Prop)).

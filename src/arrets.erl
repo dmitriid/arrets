@@ -30,8 +30,8 @@
         , pop_n/3
         , slice/3
         , slice/4
-%%        , splice/3
-%%        , splice/4
+        , splice/3
+        , splice/4
         ]).
 
 %% Data manipulation. Non-destructive

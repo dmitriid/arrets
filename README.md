@@ -39,11 +39,11 @@ again: ets).
 - `slice(Handle, Row, From, Count)`: Same for a row
 - `range(Handle, From, Count)`: Return items between `From` and `From + Count`. Leave array intact
 - `range(Handle, Row, From, Count)`: Same for a row
+- `splice(Handle, From, Count)`: Remove and return items between `From `and `From + Count` in the stack
+- `splice(Handle, Row, From, Count)`: Same for a row
 
 ### Upcoming
 
-- `splice(Handle, From, Count)`: Remove and return items between `From `and `From + Count` in the stack
-- `splice(Handle, Row, From, Count)`: Same for a row
 - `at(Handle, Index)`: Alias for `nth`
 - `at(Handle, Row, Index)`: Alias for `nth`
 - `nth(Handle, Index)`: Return `Item` at `Index`. Leave array intact.
