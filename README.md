@@ -41,13 +41,13 @@ again: ets).
 - `range(Handle, Row, From, Count)`: Same for a row
 - `splice(Handle, From, Count)`: Remove and return items between `From `and `From + Count` in the stack
 - `splice(Handle, Row, From, Count)`: Same for a row
-
-### Upcoming
-
 - `at(Handle, Index)`: Alias for `nth`
 - `at(Handle, Row, Index)`: Alias for `nth`
 - `nth(Handle, Index)`: Return `Item` at `Index`. Leave array intact.
 - `nth(Handle, Row, Index)`: Return `Item` at `Index` at `Row`. Leave array intact.
+
+### Upcoming
+
 - `insert_at(Handle, Index, Item)`: Insert `Item` at `Index`
 - `insert_at(Handle, Row, Index, Item)`: Insert `Item` at `Index` in `Row`
 - `update_at(Handle, Index, Item)`: Update `Item` at `Index`

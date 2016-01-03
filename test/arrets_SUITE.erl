@@ -45,6 +45,8 @@
 -export([ range/1
         , range_rows/1
         , range_negative/1
+        , at_nth/1
+        , at_nth_rows/1
         ]).
 
 
@@ -594,6 +596,58 @@ range_negative(Config) ->
                                             , From + 1
                                             , Count),
                     Expected == Actual
+                  end
+                ),
+  ?assert(quickcheck(Prop)).
+
+%-------------------------------------------------------------------------------
+at_nth(doc) ->
+  "Return item at position N. Array not affected";
+at_nth(Config) ->
+  Handle = lkup(arrets, Config),
+  Prop = ?FORALL( {Elements, N}
+                , ?LET( Els
+                      , non_empty(elements())
+                      , { Els
+                        , random:uniform(erlang:length(Els)) - 1
+                        }
+                      )
+                , begin
+                    populate(Handle, Elements),
+                    ActualAt = arrets:at(Handle, N),
+                    ActualNth = arrets:nth(Handle, N),
+                    Expected = lists:nth(N + 1, lists:reverse(Elements)),
+                    ActualAt == ActualNth andalso
+                    Expected == ActualAt andalso
+                    erlang:length(Elements) == arrets:length(Handle)
+                  end
+                ),
+  ?assert(quickcheck(Prop)).
+
+%-------------------------------------------------------------------------------
+at_nth_rows(doc) ->
+  "Return item at position N in a row. Array not affected";
+at_nth_rows(Config) ->
+  Handle = lkup(arrets, Config),
+  Prop = ?FORALL( ListOfElements
+                , list(non_empty(elements()))
+                , begin
+                    populate_rows(Handle, ListOfElements),
+
+                    {_, Result} = lists:foldl                                                                                                                                                                        ( fun(Elements, {Row, Result}) ->
+                      N = random:uniform(erlang:length(Elements)) - 1,
+                      ActualAt = arrets:at(Handle, Row, N),
+                      ActualNth = arrets:nth(Handle, Row, N),
+                      Expected = lists:nth(N + 1, lists:reverse(Elements)),
+
+                      { Row + 1
+                      , ActualAt == ActualNth andalso
+                        Expected == ActualAt andalso
+                        erlang:length(Elements) == arrets:length(Handle, Row) andalso
+                        Result
+                      }
+                                                                                                                                                                                                                  end, {0, true}, ListOfElements),
+                    Result
                   end
                 ),
   ?assert(quickcheck(Prop)).

@@ -37,6 +37,10 @@
 %% Data manipulation. Non-destructive
 -export([ range/3
         , range/4
+        , at/2
+        , at/3
+        , nth/2
+        , nth/3
         ]).
 
 %%_* Types =====================================================================
@@ -227,4 +231,23 @@ splice(Handle, Row, From0, Count) ->
   ets:insert(Handle, NewItems),
   [I || {_, I} <- lists:sort(Items)].
 
+-spec at(handle(), integer()) -> term().
+at(Handle, N) ->
+  nth(Handle, N).
 
+-spec at(handle(), integer(), integer()) -> term().
+at(Handle, Row, N) ->
+  nth(Handle, Row, N).
+
+-spec nth(handle(), integer()) -> term().
+nth(Handle, N) ->
+  nth(Handle, 0, N).
+
+-spec nth(handle(), integer(), integer()) -> term().
+nth(Handle, Row, N) ->
+  %% Spec = fun({{R, X}, Y}) when R =:= Row, X == From -> Y end,
+  Spec = [{{{'$1', '$2'}, '$3'},
+           [{'=:=', '$1', {const, Row}}, {'==', '$2', {const, N}}],
+           ['$3']}],
+  [Item] = ets:select(Handle, Spec),
+  Item.
