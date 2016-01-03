@@ -39,6 +39,8 @@
         , splice/1
         , splice_rows/1
         , splice_negative/1
+        , insert_at/1
+        , insert_at_rows/1
         ]).
 
 %% Data manipulation. Non-destructive
@@ -506,6 +508,60 @@ splice_negative(Config) ->
                       end
                     end, {0, []}, lists:reverse(Elements)),
                     Expected == Actual andalso Remaining == lists:reverse(ExpectedRemaining)
+                  end
+                ),
+  ?assert(quickcheck(Prop)).
+
+%-------------------------------------------------------------------------------
+insert_at(doc) ->
+  "Insert a new item at position N";
+insert_at(Config) ->
+  Handle = lkup(arrets, Config),
+  Prop = ?FORALL( {Elements, N, Item}
+                , ?LET( Els
+                      , non_empty(elements())
+                      , begin
+                          Length = erlang:length(Els),
+                          { Els
+                          , random:uniform(Length) - 1
+                          , int()
+                          }
+                        end
+                      )
+                , begin
+                    populate(Handle, Elements),
+                    arrets:insert_at(Handle, N, Item),
+                    [Actual] = arrets:splice(Handle, N, 1),
+                    Remaining = arrets:range(Handle, 0, arrets:length(Handle)),
+
+                    Item == Actual andalso
+                    lists:reverse(Elements) == Remaining
+                  end
+                ),
+  ?assert(quickcheck(Prop)).
+
+%-------------------------------------------------------------------------------
+insert_at_rows(doc) ->
+  "Remove and return items between From and From + Length in a row";
+insert_at_rows(Config) ->
+  Handle = lkup(arrets, Config),
+  Prop = ?FORALL( {ListOfElements, Item}
+                , {list(non_empty(elements())), int()}
+                , begin
+                    populate_rows(Handle, ListOfElements),
+                    {_, Result} = lists:foldl(fun(Elements, {Row, Result}) ->
+                      N = random:uniform(erlang:length(Elements)) - 1,
+                      arrets:insert_at(Handle, Row, N, Item),
+                      [Actual] = arrets:splice(Handle, Row, N, 1),
+                      Remaining = arrets:range(Handle, Row, 0, arrets:length(Handle, Row)),
+
+                      { Row + 1
+                      , Item == Actual andalso
+                        lists:reverse(Elements) == Remaining andalso
+                        Result
+                      }
+                    end, {0, true}, ListOfElements),
+                    Result
                   end
                 ),
   ?assert(quickcheck(Prop)).

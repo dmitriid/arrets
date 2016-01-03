@@ -32,6 +32,8 @@
         , slice/4
         , splice/3
         , splice/4
+        , insert_at/3
+        , insert_at/4
         ]).
 
 %% Data manipulation. Non-destructive
@@ -119,6 +121,10 @@ range(Handle, Row, From0, Count) ->
            [{{'$2', '$3'}}]}],
   Items = lists:sort(ets:select(Handle, Spec)),
   [I || {_, I} <- Items].
+
+-spec insert_at(handle(), integer(), term()) -> boolean().
+insert_at(Handle, Index, Item) ->
+  insert_at(Handle, 0, Index, Item).
 
 -spec insert_at(handle(), integer(), integer(), term()) -> boolean().
 insert_at(Handle, Row, Index, Item) ->
