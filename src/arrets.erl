@@ -253,27 +253,24 @@ splice(Handle, Row, From0, Count) ->
 
   Items = ets:select(Handle, Spec),
 
-  %%  Spec = fun({{R, X}, Y}) when R =:= Row, (X < From orelse X >= To);
-  %%                               R /= Row -> {{R, X}, Y} end
-  OtherSpec = [{{{'$1', '$2'}, '$3'},
-                [{'=:=', '$1', {const, Row}},
-                 {'orelse', {'<', '$2', {const, From}}
-                          , {'>=', '$2', {const, From + Count}}}],
-                [{{{{'$1', '$2'}}, '$3'}}]},
-               {{{'$1', '$2'}, '$3'},
-                [{'/=', '$1', {const, Row}}],
-                [{{{{'$1', '$2'}}, '$3'}}]}],
-  OtherItems = ets:select(Handle, OtherSpec),
+  %%  DeleteSpec = fun({{R, X}, Y}) when X >= From
+  %%                                   , X =< To
+  %%                                   , R =:= Row-> true end
+  DeleteSpec = [{{{'$1', '$2'}, '$3'},
+                 [{'>=', '$2', {const, From}},
+                  {'<', '$2', {const, From + Count}},
+                  {'=:=', '$1', {const, Row}}],
+                 [true]}],
+  ets:select_delete(Handle, DeleteSpec),
 
-  NewItems = lists:foldl(fun({{R, X}, Y}, Acc) ->
-    NewX = case R =:= Row andalso X >= From + Count of
-             true -> X - Count;
-             false -> X
-           end,
-    [{{R, NewX}, Y} | Acc]
-  end, [], OtherItems),
+  %%  Spec = fun({{R, X}, Y}) when R =:= Row
+  %%                             , X >= From + Count -> {{R, X}, Y} end
+  ItemsAboveSpec = [{{{'$1', '$2'}, '$3'},
+                 [{'=:=', '$1', Row}, {'>=', '$2', From + Count}],
+                 [{{{{'$1', '$2'}}, '$3'}}]}],
+  ItemsAbove = ets:select(Handle, ItemsAboveSpec),
 
-  ets:delete_all_objects(Handle),
+  NewItems = [{{R, X - Count}, Y} || {{R, X}, Y} <- ItemsAbove],
   ets:insert(Handle, NewItems),
 
   MaxIdx = length(Handle, Row),

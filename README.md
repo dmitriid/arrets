@@ -89,9 +89,10 @@ Code time=0 (0) milliseconds
 > F(fun() -> lists:foreach(fun(E) -> arrets:push(test, E) end, L) end).
 Code time=2530 (2564) milliseconds
 
-> %% Pop those back. Why popping 10 000 items takes so long? I dunno.
+> %% Pop those back. It's slower due rather inneficient code governing this
+> %% But don't fret, it's not too bad. See times for splice/range/at below
 > F(fun() -> lists:foreach(fun(_) -> arrets:pop(test) end, L) end).
-Code time=27400 (28842) milliseconds
+Code time=8430 (8511) milliseconds
 
 > %% Repopulate
 > lists:foreach(fun(E) -> arrets:push(test, E) end, L).
@@ -102,7 +103,7 @@ Code time=0 (3) milliseconds
 
 > %% Remove a random range
 > F(fun() -> arrets:splice(test, 1337, 1337) end).
-Code time=20 (13) milliseconds
+Code time=10 (10) milliseconds
 
 > %% Leave a random range
 > F(fun() -> arrets:slice(test, 1337, 1337) end).
