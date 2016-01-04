@@ -56,6 +56,8 @@
         , insert_at_rows/1
         , update_at/1
         , update_at_rows/1
+        , empty/1
+        , empty_rows/1
         ]).
 
 %% Data manipulation. Non-destructive
@@ -639,6 +641,45 @@ update_at_rows(Config) ->
                       }
                     end, {0, true}, ListOfElements),
                     Result
+                  end
+                ),
+  ?assert(quickcheck(Prop)).
+
+%-------------------------------------------------------------------------------
+empty(doc) ->
+  "Create and populate an array. Empty should empty the array and update "
+  "indices";
+empty(Config) ->
+  Handle = lkup(arrets, Config),
+  Prop = ?FORALL( Elements
+                , elements()
+                , begin
+                    populate(Handle, Elements),
+                    arrets:empty(Handle),
+                    BadIndices = [I || {{H, _}, I} <- ets:tab2list('arrets$idx')
+                                     , H == Handle, I /= -1],
+                    arrets:length(Handle) == 0 andalso BadIndices == []
+                  end
+                ),
+  ?assert(quickcheck(Prop)).
+
+%-------------------------------------------------------------------------------
+empty_rows(doc) ->
+  "Create and populate an array. Empty should empty the array and update "
+  "indices for all rows";
+empty_rows(Config) ->
+  Handle = lkup(arrets, Config),
+  Prop = ?FORALL( ListOfElements
+                , list(non_empty(elements()))
+                , begin
+                    populate_rows(Handle, ListOfElements),
+                    arrets:empty(Handle),
+                    lists:all(fun(Row) ->
+                      BadIndices = [I || {{H, R}, I} <- ets:tab2list('arrets$idx')
+                                       , H == Handle, R == Row, I /= -1],
+                      arrets:length(Handle, Row) == 0 andalso
+                      BadIndices == []
+                    end, lists:seq(0, erlang:length(ListOfElements) - 1))
                   end
                 ),
   ?assert(quickcheck(Prop)).

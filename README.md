@@ -51,6 +51,7 @@ If `From < 0`, starting element will be counted from the end of the array.
 - `insert_at(Handle, Row, Index, Item)`: Insert `Item` at `Index` in `Row`
 - `update_at(Handle, Index, Item)`: Update `Item` at `Index`
 - `update_at(Handle, Row, Index, Item)`: Update `Item` at `Index` in `Row`
+- `empty(Handle)`: Empty the entire array (remove all items from all rows)
 
 ### Data manipulation. Non-destructive
 
