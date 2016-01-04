@@ -48,6 +48,7 @@
         , insert_at/4
         , update_at/3
         , update_at/4
+        , empty/1
         ]).
 
 %% Data manipulation. Non-destructive
@@ -67,17 +68,22 @@
 
 %_* Lifecycle ------------------------------------------------------------------
 -spec new() -> integer().
-new() -> ets:new('arrets$array', [set]).
+new() ->
+  Handle = ets:new('arrets$array', [set]),
+  reset_row_idxs(Handle),
+  Handle.
 
 -spec new(atom()) -> atom().
 new(Handle) ->
   try ets:new(Handle, [set, named_table])
-  catch _:_ -> ets:delete_all_objects(Handle)
+  catch _:_ -> empty(Handle)
   end,
+  reset_row_idxs(Handle),
   Handle.
 
 -spec teardown(handle()) -> boolean().
 teardown(Handle) ->
+  remove_row_idxs(Handle),
   ets:delete(Handle).
 
 %_* Info -----------------------------------------------------------------------
@@ -87,9 +93,7 @@ length(Handle) ->
 
 -spec length(handle(), integer()) -> integer().
 length(Handle, Row) ->
-  %% ets:fun2ms(fun({{X,_},_})  when X == Row -> true end).
-  Spec = [{{{'$1', '_'}, '_'}, [{'==', '$1', {const, Row}}], [true]}],
-  ets:select_count(Handle, Spec).
+  row_idx(Handle, Row) + 1.
 
 %_* Push/Pop -------------------------------------------------------------------
 -spec push(handle(), term()) -> boolean().
@@ -98,7 +102,8 @@ push(Handle, Item) ->
 
 -spec push(handle(), integer(), term()) -> boolean().
 push(Handle, Row, Item) ->
-  insert_at(Handle, Row, 0, Item).
+  Idx = row_idx(Handle, Row),
+  insert_at(Handle, Row, Idx + 1, Item).
 
 -spec pop(handle()) -> term().
 pop(Handle) ->
@@ -117,7 +122,7 @@ pop_n(Handle, N) ->
 pop_n(_Handle, _Row, 0) ->
   [];
 pop_n(Handle, Row, N) ->
-  splice(Handle, Row, 0, N).
+  lists:reverse(splice(Handle, Row, -N, N)).
 
 -spec range(handle(), integer(), integer()) -> [term()].
 range(Handle, From, Count) ->
@@ -159,7 +164,8 @@ insert_at(Handle, Row, Index, Item) ->
                   ets:delete_object(Handle, Obj)
                 end, ItemsAbove),
   ets:insert(Handle, NewItemsAbove),
-  ets:insert(Handle, {{Row, Idx}, Item}).
+  ets:insert(Handle, {{Row, Idx}, Item}),
+  update_row_idx(Handle, Row, +1).
 
 -spec update_at(handle(), integer(), term()) -> boolean().
 update_at(Handle, Index, Item) ->
@@ -168,6 +174,11 @@ update_at(Handle, Index, Item) ->
 -spec update_at(handle(), integer(), integer(), term()) -> boolean().
 update_at(Handle, Row, Index, Item) ->
   ets:insert(Handle, {{Row, Index}, Item}).
+
+-spec empty(handle()) -> boolean().
+empty(Handle) ->
+  ets:delete_all_objects(Handle),
+  reset_row_idxs(Handle).
 
 -spec idx(handle(), integer(), integer()) -> integer().
 idx(Handle, Row, Idx0) ->
@@ -213,6 +224,13 @@ slice(Handle, Row, From0, Count) ->
   ets:delete_all_objects(Handle),
   ets:insert(Handle, NewItems),
   ets:insert(Handle, OtherItems),
+
+  MaxIdx = length(Handle, Row) - 1,
+  ActualCount = case From + Count > MaxIdx of
+                  true -> MaxIdx - From;
+                  false -> Count
+                end,
+  update_row_idx(Handle, Row, -ActualCount),
   [I || {_, I} <- lists:sort(NewItems)].
 
 %% Remove and return items between From and From + Length in the array
@@ -257,6 +275,14 @@ splice(Handle, Row, From0, Count) ->
 
   ets:delete_all_objects(Handle),
   ets:insert(Handle, NewItems),
+
+  MaxIdx = length(Handle, Row),
+  ActualCount = case From + Count > MaxIdx of
+                  true -> MaxIdx - From;
+                  false -> Count
+                end,
+
+  update_row_idx(Handle, Row, -ActualCount),
   [I || {_, I} <- lists:sort(Items)].
 
 -spec at(handle(), integer()) -> term().
@@ -279,3 +305,50 @@ nth(Handle, Row, N) ->
            ['$3']}],
   [Item] = ets:select(Handle, Spec),
   Item.
+
+%%_* Internal functions ========================================================
+
+-spec reset_row_idxs(handle()) -> boolean().
+reset_row_idxs(Handle) ->
+  try ets:new('arrets$idx', [set, named_table])
+  catch _:_ -> ok
+  end,
+
+  %% Spec = fun({{I, R}, _}) when R =:= Row -> {{I, R}, -1} end
+  Spec = [{{{'$1', '$2'}, '_'},
+           [{'=:=', '$1', {const, Handle}}],
+           [{{{{'$1', '$2'}}, -1}}]}],
+
+  Items = ets:select('arrets$idx', Spec),
+  ets:insert('arrets$idx', Items).
+
+-spec remove_row_idxs(handle()) -> boolean().
+remove_row_idxs(Handle) ->
+  %% Spec = fun({{I, R}, X}) when R =:= Row -> {{I, R}, X} end
+  Spec = [{{{'$1', '$2'}, '$3'},
+           [{'=:=', '$1', {const, Handle}}],
+           [{{{{'$1', '$2'}}, -1}}]}],
+  Items = ets:select('arrets$idx', Spec),
+  lists:foreach(fun(I) -> ets:delete_object('arrets$idx', I) end, Items).
+
+
+  -spec row_idx(handle(), integer()) -> integer().
+row_idx(Handle, Row) ->
+  %% IdxSpec = fun({{I, R}, X}) when I =:= 1, R =:= Row -> X end
+  IdxSpec = [{{{'$1', '$2'}, '$3'},
+              [{'=:=', '$1', Handle}, {'=:=', '$2', {const, Row}}],
+              ['$3']}],
+
+  case ets:select('arrets$idx', IdxSpec) of
+    [] ->
+      ets:insert('arrets$idx', {{Handle, Row}, -1}),
+      -1;
+    [Idx] ->
+      Idx
+  end.
+
+-spec update_row_idx(handle(), integer(), integer()) -> integer().
+update_row_idx(Handle, Row, ValueDiff) ->
+  Idx = row_idx(Handle, Row),
+  ets:insert('arrets$idx', {{Handle, Row}, Idx + ValueDiff}),
+  Idx + ValueDiff.

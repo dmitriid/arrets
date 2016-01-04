@@ -183,19 +183,14 @@ push(Config) ->
   Handle = lkup(arrets, Config),
   Prop = ?FORALL( Elements
                 , elements()
-                , ?WHENFAIL(
-                    begin
-                      ct:pal( "Failed. Elements: ~p~n Inserted: ~p"
-                            , [Elements, ets:tab2list(Handle)])
-                    end,
-                    begin
-                      populate(Handle, Elements),
-                      Inserted = lists:reverse(lists:sort(ets:tab2list(Handle))),
-                      InsertedItems = [I || {{_, _}, I} <- Inserted],
+                , begin
+                    populate(Handle, Elements),
+                    Inserted = lists:sort(ets:tab2list(Handle)),
+                    InsertedItems = [I || {{_, _}, I} <- scrub_idx(Inserted)],
 
-                      erlang:length(Elements) == erlang:length(Inserted) andalso
-                      Elements == InsertedItems
-                    end)
+                    erlang:length(Elements) == erlang:length(InsertedItems) andalso
+                    Elements == InsertedItems
+                  end
                 ),
   ?assert(quickcheck(Prop)).
 
@@ -209,10 +204,10 @@ push_rows(Config) ->
                 , list(elements())
                 , begin
                     populate_rows(Handle, ListOfElements),
-                    All = ets:tab2list(Handle),
+                    All = scrub_idx(ets:tab2list(Handle)),
                     {_, Result} = lists:foldl(
                        fun(Elements, {Row, ResultAcc}) ->
-                         Actual = lists:reverse([I || {{R, _}, I} <- lists:sort(All), R == Row]),
+                         Actual = [I || {{R, _}, I} <- lists:sort(All), R == Row],
                          {Row + 1, (Elements == Actual) andalso ResultAcc}
                        end, {0, true}, ListOfElements),
                     Result
@@ -227,21 +222,15 @@ pop(Config) ->
   Handle = lkup(arrets, Config),
   Prop = ?FORALL( Elements
                 , elements()
-                , ?WHENFAIL(
-                    begin
-                      ct:pal( "Failed. Elements: ~p~n"
-                            , [Elements])
-                    end,
-                    begin
-                      populate(Handle, Elements),
-                      Result = lists:all(
+                , begin
+                    populate(Handle, Elements),
+                    Result = lists:all(
                                  fun(Item) ->
-                                   Popped = arrets:pop(Handle),
-                                   Item == Popped
+                                   Item == arrets:pop(Handle)
                                  end
                                , lists:reverse(Elements)),
-                      Result andalso ets:info(Handle, size) == 0
-                    end)
+                    Result andalso ets:info(Handle, size) == 0
+                  end
                 ),
   ?assert(quickcheck(Prop)).
 
@@ -285,16 +274,22 @@ pop_n(Config) ->
                       )
                 , begin
                     populate(Handle, Elements),
-                    NFirst = lists:sublist(lists:reverse(Elements), N),
-                    NPopped = arrets:pop_n(Handle, N),
+                    Expected = case erlang:length(Elements) == 0 orelse N == 0 of
+                                 true -> [];
+                                 _ -> lists:sublist(lists:reverse(Elements), 1, N)
+                               end,
+                    Actual = arrets:pop_n(Handle, N),
                     Remaining = lists:sort(ets:tab2list(Handle)),
                     RemainingItems = [I || {_, I} <- Remaining],
 
-                    Diff = NFirst -- NPopped,
-                    RemDiff = lists:reverse(Elements -- NFirst),
+                    {_, RemDiff} = lists:foldl(fun(E, {NN, Acc}) ->
+                      case NN >= N of
+                        true -> {NN + 1, [E | Acc]};
+                        false -> {NN + 1, Acc}
+                      end
+                    end, {0, []}, lists:reverse(Elements)),
 
-                    erlang:length(NPopped) == N andalso
-                    Diff == [] andalso
+                    Expected == Actual andalso
                     RemDiff == RemainingItems
                   end
                 ),
@@ -311,21 +306,22 @@ pop_n_rows(Config) ->
                     populate_rows(Handle, ListOfElements),
                     {_, Result} = lists:foldl(
                       fun(Elements, {Row, ResultAcc}) ->
-                        NFirst = lists:sublist(lists:reverse(Elements), N),
-                        NPopped = arrets:pop_n(Handle, Row, N),
+                        Expected = case erlang:length(Elements) == 0 orelse N == 0 of
+                                     true -> [];
+                                     _ ->
+                                       lists:sublist(lists:reverse(Elements), 1, N)
+                                   end,
+                        Actual = arrets:pop_n(Handle, Row, N),
                         Remaining = lists:sort(ets:tab2list(Handle)),
                         RemainingItems = [I || {{R, _}, I} <- Remaining, R == Row],
-                        Diff = NFirst -- NPopped,
-                        {_, RemDiff0} = lists:foldl(fun(E, {NN, Acc}) ->
+                        {_, RemDiff} = lists:foldl(fun(E, {NN, Acc}) ->
                           case NN >= N of
                             true -> {NN + 1, [E | Acc]};
                             false -> {NN + 1, Acc}
                           end
                         end, {0, []}, lists:reverse(Elements)),
-                        RemDiff = lists:reverse(RemDiff0),
 
-                        Res =         erlang:length(NPopped) == erlang:length(NFirst)
-                              andalso Diff == []
+                        Res = Actual == Expected
                               andalso RemDiff == RemainingItems,
                         {Row + 1, Res andalso ResultAcc}
                       end, {0, true}, ListOfElements),
@@ -353,7 +349,7 @@ slice(Config) ->
                 , begin
                     populate(Handle, Elements),
                     arrets:slice(Handle, From, Count),
-                    Expected = lists:sublist( lists:reverse(Elements)
+                    Expected = lists:sublist( Elements
                                             , From + 1
                                             , Count),
                     Actual = [I || {_, I} <- lists:sort(ets:tab2list(Handle))],
@@ -380,7 +376,7 @@ slice_rows(Config) ->
                                              , random:uniform(Length)}
                                       end,
                       arrets:slice(Handle, Row, From, Count),
-                      Expected = lists:sublist( lists:reverse(Elements)
+                      Expected = lists:sublist( Elements
                                               , From + 1
                                               , Count),
                       Inserted = lists:sort(ets:tab2list(Handle)),
@@ -414,7 +410,7 @@ slice_negative(Config) ->
                 , begin
                     populate(Handle, Elements),
                     arrets:slice(Handle, NegativeFrom, Count),
-                    Expected = lists:sublist( lists:reverse(Elements)
+                    Expected = lists:sublist( Elements
                                             , From + 1
                                             , Count),
                     Actual = [I || {_, I} <- lists:sort(ets:tab2list(Handle))],
@@ -441,7 +437,7 @@ splice(Config) ->
                       )
                 , begin
                     populate(Handle, Elements),
-                    Expected = lists:sublist( lists:reverse(Elements)
+                    Expected = lists:sublist( Elements
                                             , From + 1
                                             , Count),
                     Actual = arrets:splice(Handle, From, Count),
@@ -451,7 +447,7 @@ splice(Config) ->
                         true -> {Idx + 1, [E | Acc]};
                         false -> {Idx + 1, Acc}
                       end
-                    end, {0, []}, lists:reverse(Elements)),
+                    end, {0, []}, Elements),
                     Expected == Actual andalso Remaining == lists:reverse(ExpectedRemaining)
                   end
                 ),
@@ -473,7 +469,7 @@ splice_rows(Config) ->
                                         _ -> { random:uniform(Length) - 1
                                              , random:uniform(Length)}
                                       end,
-                      Expected = lists:sublist( lists:reverse(Elements)
+                      Expected = lists:sublist( Elements
                                               , From + 1
                                               , Count),
                       Actual = arrets:splice(Handle, Row, From, Count),
@@ -483,7 +479,7 @@ splice_rows(Config) ->
                           true -> {Idx + 1, [E | Acc]};
                           false -> {Idx + 1, Acc}
                         end
-                      end, {0, []}, lists:reverse(Elements)),
+                      end, {0, []}, Elements),
                       { Row + 1
                       , Expected == Actual andalso
                         Remaining == lists:reverse(ExpectedRemaining) andalso
@@ -515,7 +511,7 @@ splice_negative(Config) ->
                       )
                 , begin
                     populate(Handle, Elements),
-                    Expected = lists:sublist( lists:reverse(Elements)
+                    Expected = lists:sublist( Elements
                                             , From + 1
                                             , Count),
                     Actual = arrets:splice(Handle, NegativeFrom, Count),
@@ -525,7 +521,7 @@ splice_negative(Config) ->
                         true -> {Idx + 1, [E | Acc]};
                         false -> {Idx + 1, Acc}
                       end
-                    end, {0, []}, lists:reverse(Elements)),
+                    end, {0, []}, Elements),
                     Expected == Actual andalso Remaining == lists:reverse(ExpectedRemaining)
                   end
                 ),
@@ -554,7 +550,7 @@ insert_at(Config) ->
                     Remaining = arrets:range(Handle, 0, arrets:length(Handle)),
 
                     Item == Actual andalso
-                    lists:reverse(Elements) == Remaining
+                    Elements == Remaining
                   end
                 ),
   ?assert(quickcheck(Prop)).
@@ -576,7 +572,7 @@ insert_at_rows(Config) ->
 
                       { Row + 1
                       , Item == Actual andalso
-                        lists:reverse(Elements) == Remaining andalso
+                        Elements == Remaining andalso
                         Result
                       }
                     end, {0, true}, ListOfElements),
@@ -611,7 +607,7 @@ update_at(Config) ->
                         _ -> E == Actual
                       end,
                       {Idx + 1, Res andalso Result}
-                    end, {0, true}, lists:reverse(Elements)),
+                    end, {0, true}, Elements),
                     Result
                   end
                 ),
@@ -636,7 +632,7 @@ update_at_rows(Config) ->
                           _ -> E == Actual
                         end,
                         {Idx + 1, Res andalso Result}
-                      end, {0, true}, lists:reverse(Elements)),
+                      end, {0, true}, Elements),
 
                       { Row + 1
                       , LocalResult andalso ResultAcc
@@ -663,7 +659,7 @@ range(Config) ->
                 , begin
                     populate(Handle, Elements),
                     InsertedCount = arrets:length(Handle),
-                    Expected = lists:sublist( lists:reverse(Elements)
+                    Expected = lists:sublist( Elements
                                             , From + 1
                                             , Count),
                     Actual = arrets:range(Handle, From, Count),
@@ -692,7 +688,7 @@ range_rows(Config) ->
                                              , random:uniform(Length)}
                                       end,
                       Actual = arrets:range(Handle, Row, From, Count),
-                      Expected = lists:sublist( lists:reverse(Elements)
+                      Expected = lists:sublist( Elements
                                               , From + 1
                                               , Count),
                       InsertedLength = arrets:length(Handle, Row),
@@ -729,7 +725,7 @@ range_negative(Config) ->
                 , begin
                     populate(Handle, Elements),
                     Actual = arrets:range(Handle, NegativeFrom, Count),
-                    Expected = lists:sublist( lists:reverse(Elements)
+                    Expected = lists:sublist( Elements
                                             , From + 1
                                             , Count),
                     Expected == Actual
@@ -753,7 +749,7 @@ at_nth(Config) ->
                     populate(Handle, Elements),
                     ActualAt = arrets:at(Handle, N),
                     ActualNth = arrets:nth(Handle, N),
-                    Expected = lists:nth(N + 1, lists:reverse(Elements)),
+                    Expected = lists:nth(N + 1, Elements),
                     ActualAt == ActualNth andalso
                     Expected == ActualAt andalso
                     erlang:length(Elements) == arrets:length(Handle)
@@ -775,7 +771,7 @@ at_nth_rows(Config) ->
                       N = random:uniform(erlang:length(Elements)) - 1,
                       ActualAt = arrets:at(Handle, Row, N),
                       ActualNth = arrets:nth(Handle, Row, N),
-                      Expected = lists:nth(N + 1, lists:reverse(Elements)),
+                      Expected = lists:nth(N + 1, Elements),
 
                       { Row + 1
                       , ActualAt == ActualNth andalso
@@ -810,12 +806,12 @@ doc(Name) ->
   ct:pal("~s", [Desc]).
 
 populate(Handle, Elements) ->
-  ets:delete_all_objects(Handle),
+  arrets:empty(Handle),
   lists:foreach( fun(Element) -> arrets:push(Handle, Element) end
                , Elements).
 
 populate_rows(Handle, ListOfElements) ->
-  ets:delete_all_objects(Handle),
+  arrets:empty(Handle),
   lists:foldl(
     fun(Elements, Row) ->
       lists:foreach(
@@ -826,3 +822,6 @@ populate_rows(Handle, ListOfElements) ->
       Row + 1
     end, 0, ListOfElements
   ).
+
+scrub_idx(L) ->
+  [I || {{R, _}, _} = I <- L, R /= 'arrets$idx'].

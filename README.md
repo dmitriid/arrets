@@ -1,10 +1,6 @@
 # arrets
 A silly non-performant array implementation on top of ets.
 
-Note: currently works as a stack with array semantics (that is, when
-you do range queries you will get items in reverse order etc.).
-This will change to mimic proper array behaviour.
-
 ## Why?
 
 I "needed" an array/stack with Javascript-like semantics: ability
