@@ -1,6 +1,8 @@
 # arrets
 A silly non-performant array implementation on top of ets.
 
+For "benchmarks" scroll all the way down.
+
 ## Why?
 
 I "needed" an array/stack with Javascript-like semantics: ability
@@ -61,3 +63,67 @@ If `From < 0`, starting element will be counted from the end of the array.
 - `at(Handle, Row, Index)`: Alias for `nth`
 - `nth(Handle, Index)`: Return `Item` at `Index`. Leave array intact.
 - `nth(Handle, Row, Index)`: Return `Item` at `Index` at `Row`. Leave array intact.
+
+## "Benchmarks"
+
+Non-scientific ballpark figures using a Macbook Pro and `statistics/1`.
+
+```erlang
+> F = fun(Fun) ->
+        statistics(runtime),
+        statistics(wall_clock),
+        Fun(),
+        {_, Time1} = statistics(runtime),
+        {_, Time2} = statistics(wall_clock),
+        U1 = Time1,
+        U2 = Time2,
+        io:format("Code time=~p (~p) milliseconds~n", [U1,U2])
+     end.
+> L = lists:seq(0, 10000).
+
+> %% Create new
+> F(fun() -> arrets:new(test) end).
+Code time=0 (0) milliseconds
+
+> %% Push 10 000 items
+> F(fun() -> lists:foreach(fun(E) -> arrets:push(test, E) end, L) end).
+Code time=2530 (2564) milliseconds
+
+> %% Pop those back. Why popping 10 000 items takes so long? I dunno.
+> F(fun() -> lists:foreach(fun(_) -> arrets:pop(test) end, L) end).
+Code time=27400 (28842) milliseconds
+
+> %% Repopulate
+> lists:foreach(fun(E) -> arrets:push(test, E) end, L).
+
+> %% Get back a random range
+> F(fun() -> arrets:range(test, 1337, 1337) end).
+Code time=0 (3) milliseconds
+
+> %% Remove a random range
+> F(fun() -> arrets:splice(test, 1337, 1337) end).
+Code time=20 (13) milliseconds
+
+> %% Leave a random range
+> F(fun() -> arrets:slice(test, 1337, 1337) end).
+Code time=0 (5) milliseconds
+
+> %% Empty and repopulate
+> arrets:empty(test), lists:foreach(fun(E) -> arrets:push(test, E) end, L).
+
+> %% Access a random element
+> F(fun() -> arrets:at(test, 1337) end).
+Code time=0 (1) milliseconds
+
+> %% Pop n elements
+> F(fun() -> arrets:pop_n(test, 1337) end).
+Code time=10 (8) milliseconds
+
+> %% Empty array
+> F(fun() -> arrets:empty(test) end).
+Code time=0 (1) milliseconds
+
+> %% Destroy array
+> F(fun() -> arrets:teardown(test) end).
+Code time=0 (0) milliseconds
+```
