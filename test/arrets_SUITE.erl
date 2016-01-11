@@ -132,7 +132,7 @@ new_with_handle(doc) ->
   "exists";
 new_with_handle(_) ->
   Handle = arrets:new(handle),
-  ?assertNotEqual(undefined, ets:info(Handle)),
+  ?assertEqual(handle, ets:info(Handle)),
   ets:delete(Handle).
 
 %-------------------------------------------------------------------------------
